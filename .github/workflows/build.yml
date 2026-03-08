@@ -1,0 +1,28 @@
+name: Build Offline APK
+on: workflow_dispatch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-java@v3
+        with: { distribution: 'temurin', java-version: '17' }
+      - uses: subosito/flutter-action@v2
+        with: { channel: 'stable' }
+
+      - name: Inject AI Model
+        run: |
+          mkdir -p assets/models
+          wget -q -O assets/models/tinyllama.gguf https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
+
+      - name: Build Android APK
+        run: |
+          flutter pub get
+          flutter build apk --release
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Poco-F5-Uncensored-AI
+          path: build/app/outputs/flutter-apk/app-release.apk
