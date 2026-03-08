@@ -1,0 +1,18 @@
+name: offline_uncensored_ai
+description: Offline Uncensored AI for Poco F5.
+version: 1.0.0+1
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  path_provider: ^2.1.2
+  llamacpp_dart: ^0.0.8
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/models/
