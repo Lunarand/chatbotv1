@@ -10,7 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   path_provider: ^2.1.2
-  llamacpp_dart: ^0.0.8
+  llamadart: ^0.6.5
 
 flutter:
   uses-material-design: true
