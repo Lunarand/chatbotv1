@@ -27,30 +27,42 @@ class _OfflineChatState extends State<OfflineChat> {
   @override
   void initState() {
     super.initState();
-    initModel();
+    // Use a small delay so the app UI shows up BEFORE the heavy copying starts
+    Future.delayed(const Duration(seconds: 1), () => initModel());
   }
 
   Future<void> initModel() async {
-    final directory = await getApplicationDocumentsDirectory();
-    final path = '${directory.path}/model.gguf';
-    final file = File(path);
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final path = '${directory.path}/model.gguf';
+      final file = File(path);
 
-    if (!await file.exists()) {
-      setState(() => messages.add({"bot": "System: Preparing AI Engine..."}));
-      final data = await rootBundle.load('assets/models/tinyllama.gguf');
-      final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-      await file.writeAsBytes(bytes);
+      if (!await file.exists()) {
+        setState(() => messages.add({"bot": "System: Unpacking AI Brain (680MB)... Please wait."}));
+        
+        // This is the heavy RAM part. We load it as a buffer.
+        final data = await rootBundle.load('assets/models/tinyllama.gguf');
+        final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+        await file.writeAsBytes(bytes, flush: true);
+        
+        setState(() => messages.add({"bot": "System: Model saved to storage."}));
+      }
+
+      // Initialize engine safely
+      setState(() => messages.add({"bot": "System: Loading Snapdragon AI Engine..."}));
+      engine = LlamaEngine(LlamaBackend());
+      await engine!.loadModel(path);
+
+      setState(() {
+        isReady = true;
+        messages.clear();
+        messages.add({"bot": "System: Offline AI Ready. Uncensored: ${isUncensoredMode ? 'ON' : 'OFF'}"});
+      });
+    } catch (e) {
+      setState(() {
+        messages.add({"bot": "CRASH PREVENTED: $e\n\nTip: Check if your phone has at least 1GB of free space."});
+      });
     }
-
-    // Initialize the official llamadart engine
-    engine = LlamaEngine(LlamaBackend());
-    await engine!.loadModel(path);
-
-    setState(() {
-      isReady = true;
-      messages.clear();
-      messages.add({"bot": "System: Offline AI Ready. Uncensored: ${isUncensoredMode ? 'ON' : 'OFF'}"});
-    });
   }
 
   void _clearChat() {
@@ -78,14 +90,9 @@ class _OfflineChatState extends State<OfflineChat> {
     String prompt = "<|system|>\n$sysPrompt</s>\n<|user|>\n$text</s>\n<|assistant|>\n$prefix";
     
     String fullResponse = prefix;
-    
-    // Create an empty bot bubble to fill with the streaming response
-    setState(() {
-      messages.add({"bot": fullResponse});
-    });
+    setState(() => messages.add({"bot": fullResponse}));
     
     try {
-      // THE FIX: The generate function hands us the raw String token directly!
       await for (final token in engine!.generate(prompt)) {
         setState(() {
           fullResponse += token;
@@ -99,19 +106,17 @@ class _OfflineChatState extends State<OfflineChat> {
       });
     }
 
-    setState(() {
-      isTyping = false;
-    });
+    setState(() => isTyping = false);
   }
 
   void _scrollToBottom() {
-    Future.delayed(const Duration(milliseconds: 100), () {
+    if (_scrollController.hasClients) {
       _scrollController.animateTo(
         _scrollController.position.maxScrollExtent,
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
       );
-    });
+    }
   }
 
   @override
@@ -122,16 +127,6 @@ class _OfflineChatState extends State<OfflineChat> {
         title: const Text("Poco AI (Offline)"),
         backgroundColor: const Color(0xFF1F1F1F),
         actions: [
-          Row(
-            children: [
-              const Text("Uncensored", style: TextStyle(fontSize: 10)),
-              Switch(
-                value: isUncensoredMode,
-                activeColor: Colors.redAccent,
-                onChanged: (val) => setState(() => isUncensoredMode = val),
-              ),
-            ],
-          ),
           IconButton(icon: const Icon(Icons.delete_forever), onPressed: _clearChat)
         ],
       ),
@@ -152,7 +147,6 @@ class _OfflineChatState extends State<OfflineChat> {
                     decoration: BoxDecoration(
                       color: isUser ? const Color(0xFF005C4B) : const Color(0xFF202C33),
                       borderRadius: BorderRadius.circular(12),
-                      border: !isUser && isUncensoredMode ? Border.all(color: Colors.redAccent.withOpacity(0.5)) : null,
                     ),
                     child: Text(
                       isUser ? messages[i]["user"]! : messages[i]["bot"]!,
@@ -163,7 +157,7 @@ class _OfflineChatState extends State<OfflineChat> {
               },
             ),
           ),
-          if (isTyping) const LinearProgressIndicator(color: Colors.redAccent, backgroundColor: Colors.transparent),
+          if (isTyping) const LinearProgressIndicator(color: Colors.redAccent),
           Container(
             padding: const EdgeInsets.all(10),
             color: const Color(0xFF1F1F1F),
@@ -178,7 +172,7 @@ class _OfflineChatState extends State<OfflineChat> {
                 ),
                 IconButton(
                   onPressed: isReady && !isTyping ? _sendMessage : null,
-                  icon: Icon(Icons.send, color: isUncensoredMode ? Colors.redAccent : Colors.blue),
+                  icon: const Icon(Icons.send, color: Colors.redAccent),
                 ),
               ],
             ),
