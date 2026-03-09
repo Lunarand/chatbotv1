@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:llamacpp_dart/llamacpp_dart.dart';
+import 'package:llamadart/llamadart.dart';
 
 void main() => runApp(const MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -16,7 +16,7 @@ class OfflineChat extends StatefulWidget {
 }
 
 class _OfflineChatState extends State<OfflineChat> {
-  Llama? llama;
+  LlamaEngine? engine;
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   List<Map<String, String>> messages = [];
@@ -36,14 +36,16 @@ class _OfflineChatState extends State<OfflineChat> {
     final file = File(path);
 
     if (!await file.exists()) {
-      setState(() => messages.add({"bot": "System: Preparing AI Engine for Poco F5..."}));
+      setState(() => messages.add({"bot": "System: Preparing AI Engine..."}));
       final data = await rootBundle.load('assets/models/tinyllama.gguf');
       final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
       await file.writeAsBytes(bytes);
     }
 
-    // Optimized for Snapdragon 7+ Gen 2 (4 threads for speed)
-    llama = Llama(modelPath: path, contextSize: 1024, nThreads: 4);
+    // Initialize the official llamadart engine
+    engine = LlamaEngine(LlamaBackend());
+    await engine!.loadModel(path);
+
     setState(() {
       isReady = true;
       messages.clear();
@@ -58,7 +60,7 @@ class _OfflineChatState extends State<OfflineChat> {
     });
   }
 
-  void _sendMessage() {
+  void _sendMessage() async {
     final text = _controller.text.trim();
     if (text.isEmpty || !isReady || isTyping) return;
 
@@ -77,25 +79,30 @@ class _OfflineChatState extends State<OfflineChat> {
     
     String fullResponse = prefix;
     
+    // Create an empty bot bubble to fill with the streaming response
+    setState(() {
+      messages.add({"bot": fullResponse});
+    });
+    
     try {
-      for (var token in llama!.generate(
-        prompt, 
-        nPredict: 512, 
-        temp: isUncensoredMode ? 0.8 : 0.6,
-        repeatPenalty: 1.2
-      )) {
-        fullResponse += token;
+      // The generation loop for the real llamadart package
+      await for (final chunk in engine!.generate(prompt)) {
+        final token = chunk.choices.first.delta.content ?? '';
+        setState(() {
+          fullResponse += token;
+          messages[messages.length - 1] = {"bot": fullResponse};
+        });
+        _scrollToBottom();
       }
     } catch (e) {
-      fullResponse = "System Error: Model crashed. Clear chat to reset.";
+      setState(() {
+        messages[messages.length - 1] = {"bot": "System Error: Model crashed. Clear chat to reset."};
+      });
     }
 
     setState(() {
-      messages.add({"bot": fullResponse});
       isTyping = false;
     });
-    
-    _scrollToBottom();
   }
 
   void _scrollToBottom() {
