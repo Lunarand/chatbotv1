@@ -18,11 +18,14 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Fix/Initialize Project Structure
+      - name: Fix Project Structure and Expand RAM Limits
         run: |
-          # This command creates the missing android/ folder and Gradle files
-          # It uses your existing pubspec.yaml to keep the app name and package
+          # 1. Generate the Android folders and Gradle files
           flutter create --platforms=android .
+          
+          # 2. THE FIX: Inject largeHeap="true" into the Android Manifest
+          # This prevents the "2-second crash" by allowing high RAM usage
+          sed -i 's/<application/<application android:largeHeap="true"/g' android/app/src/main/AndroidManifest.xml
 
       - name: Inject AI Model
         run: |
@@ -32,7 +35,7 @@ jobs:
       - name: Build Android APK
         run: |
           flutter pub get
-          # We use --no-tree-shake-icons to avoid common font build errors
+          # Using --no-tree-shake-icons to prevent build-time font errors
           flutter build apk --release --no-tree-shake-icons
 
       - name: Upload Artifact
