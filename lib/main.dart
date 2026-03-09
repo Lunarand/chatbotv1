@@ -85,9 +85,8 @@ class _OfflineChatState extends State<OfflineChat> {
     });
     
     try {
-      // The generation loop for the real llamadart package
-      await for (final chunk in engine!.generate(prompt)) {
-        final token = chunk.choices.first.delta.content ?? '';
+      // THE FIX: The generate function hands us the raw String token directly!
+      await for (final token in engine!.generate(prompt)) {
         setState(() {
           fullResponse += token;
           messages[messages.length - 1] = {"bot": fullResponse};
